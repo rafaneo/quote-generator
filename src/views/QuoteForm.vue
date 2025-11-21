@@ -127,10 +127,16 @@
         <input v-model="tax_id" type="text" id="tax_id" />
       </div>
       <div class="col-md-4 mb-3">
+        <label for="vat_id">VAT ID</label>
+        <input v-model="vat_id" type="text" id="vat_id" />
+      </div>
+      <div class="col-md-4 mb-3">
         <label for="tax">VAT (%)</label>
         <input v-model="tax" @input="calculateTotalAfterTax()" type="number" id="tax" />
       </div>
+    </div>
 
+    <div class="row">
       <div class="col-md-4 mb-3">
         <label for="disable_vat">Disable Vat</label>
         <input v-model="dissable_vat" type="checkbox" id="disable_vat" />
@@ -194,6 +200,16 @@
       </div>
 
       <div class="col-md-4 mb-3">
+        <label for="discount_amount">Discount Amount</label>
+        <input v-model="discount_amount" type="number" id="discount_amount" readonly />
+      </div>
+
+      <div class="col-md-4 mb-3">
+        <label for="vat_amount">VAT Amount</label>
+        <input v-model="vat_amount" type="number" id="vat_amount" readonly />
+      </div>
+
+      <div class="col-md-4 mb-3">
         <label for="amount_at">Total Amount After VAT</label>
         <input v-model="amount_at" type="number" id="amount_at" readonly />
       </div>
@@ -234,8 +250,9 @@ export default {
         num: '',
         terms: 'cheque',
         tax_id: '60087675R',
+        vat_id: '60087675R',
         type: 'QUOTE',
-        tax: 0,
+        tax: 19,
         title: ' ',
         description: '',
         amount: 0,
@@ -243,6 +260,8 @@ export default {
         dissable_vat: false,
         discount: 0,
         amount_ad: 0,
+        discount_amount: 0,
+        vat_amount: 0,
         show_discount: false,
         date: new Date().toISOString().substring(0, 10),
         items: [
@@ -278,17 +297,26 @@ export default {
 
         calculateFinalAmount() {
           let finalAmount = this.amount;
+          let discountAmount = 0;
+          let vatAmount = 0;
 
+          // Calculate discount amount
           if (this.show_discount && this.discount > 0) {
-            finalAmount -= finalAmount * (this.discount / 100);
+            discountAmount = finalAmount * (this.discount / 100);
+            finalAmount -= discountAmount;
           }
 
           this.amount_ad = finalAmount;
+          this.discount_amount = discountAmount;
 
+          // Calculate VAT amount
           if (!this.dissable_vat) {
-            finalAmount += finalAmount * (this.tax / 100);
+            vatAmount = finalAmount * (this.tax / 100);
+            finalAmount += vatAmount;
           }
+          
           this.amount_at = finalAmount;
+          this.vat_amount = vatAmount;
         },
 
         calculateTotalAfterTax() {
@@ -346,15 +374,22 @@ export default {
                     {
                       margin:[0,5,0,0],
                       columns :
-                      [ 
-                        { text: "Tax ID:", color: "#bdbdbd" , margin:[0,3,0,0]}, 
-                        {text: this.tax_id, fontSize: 10, margin:[-218,5,0,0]} 
+                      [
+                        { text: "Tax ID:", color: "#bdbdbd" , margin:[0,3,0,0]},
+                        {text: this.tax_id, fontSize: 10, margin:[-218,5,0,0]}
                       ],
                     },
+                    this.vat_id ? {
+                      columns:
+                      [
+                        { text: "VAT ID:", color: "#bdbdbd" , margin:[0,3,0,0]},
+                        {text: this.vat_id, fontSize: 10, margin:[-218,5,0,0]}
+                      ],
+                    } : null,
                     {
                       columns:
-                      [ 
-                        { text: 'Reg Number:', color: "#bdbdbd" , margin:[0,3,0,0]}, 
+                      [
+                        { text: 'Reg Number:', color: "#bdbdbd" , margin:[0,3,0,0]},
                         {text: "HE 460570", fontSize: 10, margin:[-185,5,0,0]}
                       ],
                     },
@@ -419,7 +454,7 @@ export default {
                         headerRows: 1,
                         widths: [ 290, 50, 80, 75 ],
                         body: [
-                          [ {text:'Item', color: "#FFFFFF"}, {text:'Quantity', color: "#FFFFFF", alignment: 'right'}, {text:'Rate', color: "#FFFFFF", alignment: 'right'}, {text:'Amount', color: "#FFFFFF", alignment: 'right'} ],
+                          [ {text:'Item', color: "#000000"}, {text:'Quantity', color: "#000000", alignment: 'right'}, {text:'Rate', color: "#000000", alignment: 'right'}, {text:'Amount', color: "#000000", alignment: 'right'} ],
                           ...this.items.map(item =>{ 
                             return [{text: item.description, alignment:'left', lineHeight: 1.5}, {text: item.quantity, lineHeight: 1.5, alignment: 'right'}, {text: `€${item.rate}`, alignment:'right', lineHeight: 1.5}, {text: ` €${item.price}`, lineHeight: 1.5, alignment:'right'}];
                           })
@@ -427,21 +462,71 @@ export default {
                       },
                    },
 
-                   this.show_discount ? 
-                    {text: `Discount: ${this.discount}%`, style: 'subheader', margin: [0, 40, 0, 0]}
-                    : null,
-                  
-                    !this.show_discount
-                    ? [{ text: `Total Amount: €${this.amount}`, style: 'subheader', margin: [0, 40, 0, 0] }]
-                    : [
-                        { text: `Total Amount: €${this.amount}`, style: 'subheader', margin: [0, 40, 0, 0] },
-                        { text: `Total Amount after discount: €${this.amount_ad}`, style: 'subheader', margin: [0, 10, 0, 0] }
-                      ],
-                   {text: `VAT: ${this.dissable_vat ? "N/A" : this.tax + "%"}`, style: 'subheader', margin: [0, 10, 0, 0]},
-                   this.dissable_vat ? 
-                    null
-                    : 
-                    {text: `Total Amount After VAT: €${this.amount_at}`, style: 'subheader', margin: [0, 10, 0, 0]},
+                   // Payment Summary Section
+                   {
+                     text: 'Payment Summary',
+                     style: 'subheader',
+                     fontSize: 16,
+                     bold: true,
+                     margin: [0, 40, 0, 20],
+                     decoration: 'underline'
+                   },
+                   {
+                     margin: [0, 0, 0, 0],
+                     layout: {
+                       hLineWidth: function (i, node) {
+                         return i === 0 || i === node.table.body.length ? 1 : 0.5;
+                       },
+                       vLineWidth: function (i, node) {
+                         return 0;
+                       },
+                       hLineColor: function (i, node) {
+                         return i === 0 || i === node.table.body.length ? '#444444' : '#dddddd';
+                       },
+                     },
+                     table: {
+                       headerRows: 0,
+                       widths: [ 280, 80, 80, 80 ],
+                       body: [
+                         [
+                           { text: 'Description', bold: true, fontSize: 11 },
+                           { text: 'Percentage', bold: true, fontSize: 11, alignment: 'right' },
+                           { text: 'Amount (€)', bold: true, fontSize: 11, alignment: 'right' },
+                           { text: 'Total (€)', bold: true, fontSize: 11, alignment: 'right' }
+                         ],
+                         [
+                           { text: 'Subtotal', fontSize: 10 },
+                           { text: '-', fontSize: 10, alignment: 'right' },
+                           { text: '-', fontSize: 10, alignment: 'right' },
+                           { text: this.amount.toFixed(2), fontSize: 10, alignment: 'right' }
+                         ],
+                         ...(this.show_discount && this.discount > 0 ? [
+                           [
+                             { text: 'Discount', fontSize: 10 },
+                             { text: `-${this.discount}%`, fontSize: 10, alignment: 'right' },
+                             { text: `-${this.discount_amount.toFixed(2)}`, fontSize: 10, alignment: 'right', color: '#d32f2f' },
+                             { text: this.amount_ad.toFixed(2), fontSize: 10, alignment: 'right' }
+                           ]
+                         ] : []),
+                         ...(this.dissable_vat ? [] : [
+                           [
+                             { text: 'VAT', fontSize: 10 },
+                             { text: `+${this.tax}%`, fontSize: 10, alignment: 'right' },
+                             { text: `+${this.vat_amount.toFixed(2)}`, fontSize: 10, alignment: 'right', color: '#388e3c' },
+                             { text: this.amount_at.toFixed(2), fontSize: 10, alignment: 'right', bold: true }
+                           ]
+                         ]),
+                         ...(this.dissable_vat ? [
+                           [
+                             { text: 'Total Amount (VAT disabled)', fontSize: 10, bold: true },
+                             { text: '-', fontSize: 10, alignment: 'right' },
+                             { text: '-', fontSize: 10, alignment: 'right' },
+                             { text: this.amount_ad.toFixed(2), fontSize: 10, alignment: 'right', bold: true }
+                           ]
+                         ] : [])
+                       ],
+                     },
+                   },
                    
                    // Payment details section removed from here since it's now in the top right
                    
@@ -583,5 +668,46 @@ export default {
 input[type="checkbox"] {
   width: auto;
   display: inline;
+}
+
+/* Summary section styling */
+.summary-section {
+  margin-top: 20px;
+  padding: 15px;
+  border: 2px solid #007bff;
+  border-radius: 8px;
+  background-color: #f8f9fa;
+}
+
+.summary-title {
+  font-size: 18px;
+  font-weight: bold;
+  color: #007bff;
+  margin-bottom: 15px;
+  text-align: center;
+  text-decoration: underline;
+}
+
+/* Styling for amount input fields */
+input[type="number"]:read-only {
+  background-color: #f8f9fa;
+  font-weight: bold;
+  color: #495057;
+}
+
+input#discount_amount {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+input#vat_amount {
+  background-color: #e8f5e8;
+  color: #2e7d32;
+}
+
+input#amount_at {
+  background-color: #e3f2fd;
+  color: #1565c0;
+  font-size: 16px;
 }
 </style>
